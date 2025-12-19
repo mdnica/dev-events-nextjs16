@@ -1,6 +1,8 @@
 import { Schema, model, models, Document } from "mongoose";
 
-// TypeScript interface for Event document
+// -----------------------------------------------------
+// 1. TypeScript Interface
+// -----------------------------------------------------
 export interface IEvent extends Document {
   title: string;
   slug: string;
@@ -9,9 +11,9 @@ export interface IEvent extends Document {
   image: string;
   venue: string;
   location: string;
-  date: string;
-  time: string;
-  mode: string;
+  startDateTime: Date;
+  endDateTime: Date;
+  mode: "online" | "offline" | "hybrid";
   audience: string;
   agenda: string[];
   organizer: string;
@@ -20,115 +22,161 @@ export interface IEvent extends Document {
   updatedAt: Date;
 }
 
+// -----------------------------------------------------
+// 2. Helper Functions
+// -----------------------------------------------------
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+// -----------------------------------------------------
+// 3. Schema Definition
+// -----------------------------------------------------
 const EventSchema = new Schema<IEvent>(
   {
     title: {
       type: String,
       required: [true, "Title is required"],
       trim: true,
-      maxlength: [100, "Title cannot exceed 100 characters"],
+      maxlength: 100,
     },
+
     slug: {
       type: String,
       unique: true,
       lowercase: true,
       trim: true,
     },
+
     description: {
       type: String,
-      required: [true, "Description is required"],
-      trim: true,
-      maxlength: [1000, "Description cannot exceed 1000 characters"],
+      required: true,
+      maxlength: 1000,
     },
+
     overview: {
       type: String,
-      required: [true, "Overview is required"],
-      trim: true,
-      maxlength: [500, "Overview cannot exceed 500 characters"],
+      required: true,
+      maxlength: 500,
     },
+
     image: {
       type: String,
-      required: [true, "Image URL is required"],
-      trim: true,
+      required: true,
     },
+
     venue: {
       type: String,
-      required: [true, "Venue is required"],
-      trim: true,
+      required: true,
     },
+
     location: {
       type: String,
-      required: [true, "Location is required"],
-      trim: true,
+      required: true,
     },
-    date: {
-      type: String,
-      required: [true, "Date is required"],
+
+    startDateTime: {
+      type: Date,
+      required: [true, "Start date/time is required"],
     },
-    time: {
-      type: String,
-      required: [true, "Time is required"],
+
+    endDateTime: {
+      type: Date,
+      required: [true, "End date/time is required"],
     },
+
     mode: {
       type: String,
-      required: [true, "Mode is required"],
-      enum: {
-        values: ["online", "offline", "hybrid"],
-        message: "Mode must be either online, offline or hybrid",
-      },
+      enum: ["online", "offline", "hybrid"],
+      required: true,
     },
+
     audience: {
       type: String,
-      required: [true, "Audience is required"],
+      required: true,
       trim: true,
     },
+
     agenda: {
       type: [String],
-      required: [true, "Agenda is required"],
+      required: true,
       validate: {
         validator: (v: string[]) => v.length > 0,
         message: "At least one agenda item is required",
       },
     },
+
     organizer: {
       type: String,
-      required: [true, "Organizer is required"],
-      trim: true,
+      required: true,
     },
+
     tags: {
       type: [String],
-      required: [true, "Tags are required"],
+      required: true,
       validate: {
         validator: (v: string[]) => v.length > 0,
         message: "At least one tag is required",
       },
     },
   },
-  {
-    timestamps: true, // Auto-generate createdAt and updatedAt
-  }
+  { timestamps: true }
 );
 
-// Pre-save hook for slug generation and data normalization
+// -----------------------------------------------------
+// 4. Hooks
+// -----------------------------------------------------
+
+// Pre-save (runs on .save())
 EventSchema.pre("save", function (next) {
-  const event = this as IEvent;
+  const event = this as Event;
 
-  // Generate slug only if title changed or document is new
   if (event.isModified("title") || event.isNew) {
-    event.slug = generateSlug(event.title);
+    const baseSlug = generateSlug(event.title);
+    event.slug = `${baseSlug}-${event._id.toString().slice(-6)}`;
   }
 
-  // Normalize date to ISO format if it's not already
-  if (event.isModified("date")) {
-    event.date = normalizeDate(event.date);
-  }
-
-  // Normalize time format (HH:MM)
-  if (event.isModified("time")) {
-    event.time = normalizeTime(event.time);
+  // Ensure end time is after start time
+  if (event.startDateTime >= event.endDateTime) {
+    return next(new Error("End date/time must be after start date/time"));
   }
 
   next();
 });
 
-// Helper function to generate URL-friendly slug
+// Pre-update (for findOneAndUpdate)
+EventSchema.pre("findOneAndUpdate", function (next) {
+  const update = this.getUpdate() as Partial<IEvent> & { title?: string };
+
+  if (update?.title) {
+    update.slug = `${generateSlug(update.title)}-${Date.now().toString(36)}`;
+    this.setUpdate(update);
+  }
+
+  next();
+});
+
+// 5. Indexes
+
+// query speed for event pages
+EventSchema.index({ slug: 1 }, { unique: true });
+
+// Fast filtering by date or mode
+EventSchema.index({ startDateTime: 1 });
+EventSchema.index({ mode: 1 });
+
+// Combined query performance
+EventShema.index({ startDateTime: 1, mode: 1 });
+
+// Full-text search for title/description
+EventSchema.index({ title: "text", descsription: "text", overview: "text" });
+
+// 6. Model export
+const Event = models.Event || model<IEvent>("Event", EventSchema);
+export default Event;
