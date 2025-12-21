@@ -172,10 +172,10 @@ EventSchema.index({ startDateTime: 1 });
 EventSchema.index({ mode: 1 });
 
 // Combined query performance
-EventShema.index({ startDateTime: 1, mode: 1 });
+EventSchema.index({ startDateTime: 1, mode: 1 });
 
 // Full-text search for title/description
-EventSchema.index({ title: "text", descsription: "text", overview: "text" });
+EventSchema.index({ title: "text", description: "text", overview: "text" });
 
 // 6. Model export
 const Event = models.Event || model<IEvent>("Event", EventSchema);

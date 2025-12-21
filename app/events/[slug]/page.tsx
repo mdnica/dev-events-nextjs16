@@ -1,18 +1,18 @@
 import { Suspense } from "react";
-import EventDetails from "@/components/EventDetails";
+import EventDetails from "./EventDetails";
 
-const EventDetailsPage = async ({
+export default async function EventDetailsPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
-}) => {
+}) {
+  const { slug } = await params;
+
   return (
-    <main>
-      <Suspense fallback={<div>Loading...</div>}>
-        <EventDetails params={slug} />
+    <main className="container mx-auto py-10">
+      <Suspense fallback={<div>Loading event...</div>}>
+        <EventDetails slug={slug} />
       </Suspense>
     </main>
   );
-};
-
-export default EventDetailsPage;
+}
